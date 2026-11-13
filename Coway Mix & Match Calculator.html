@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Coway Mix & Match Calculator</title>
+<style>
+:root{--bg:#f3f8fa;--card:#fff;--ink:#12303a;--mute:#5d7a85;--line:#d5e3e8;--accent:#0a7c9b;--accent-ink:#fff;--save:#12805c;--box:#e4f3f7;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1a1f;--card:#16262d;--ink:#e6f1f4;--mute:#8fb0ba;--line:#2a4049;--accent:#3ab5d6;--accent-ink:#06222b;--save:#4cc99a;--box:#1b3540}}
+:root[data-theme="dark"]{--bg:#0e1a1f;--card:#16262d;--ink:#e6f1f4;--mute:#8fb0ba;--line:#2a4049;--accent:#3ab5d6;--accent-ink:#06222b;--save:#4cc99a;--box:#1b3540}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 "Segoe UI",system-ui,sans-serif}
+main{max-width:520px;margin:0 auto;padding:18px 14px 40px}
+h1{font-size:1.35rem;margin:0 0 4px}
+p.sub{margin:0 0 16px;color:var(--mute);font-size:.92rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+.rule{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rule input{width:64px}
+label{font-size:.9rem;color:var(--mute)}
+input{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0}
+input:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.row{display:grid;grid-template-columns:1fr 104px 34px;gap:8px;margin-bottom:8px}
+.row .res{grid-column:1 / 3;font-size:.88rem;color:var(--mute);margin-top:-2px}
+.row .res b{color:var(--save);font-weight:600}
+.row .res s{margin-right:6px}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 12px}
+button.x{padding:0;color:var(--mute)}
+button.main{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.actions{display:flex;gap:8px;margin-top:6px}
+.actions button{flex:1}
+.total{background:var(--box);border-radius:10px;padding:14px}
+.total div{display:flex;justify-content:space-between;margin:2px 0}
+.total .big{font-size:1.4rem;font-weight:700;margin-top:6px}
+.total .sv{color:var(--save);font-weight:600}
+.note{font-size:.85rem;color:var(--mute);margin:8px 0 0}
+</style>
+</head>
+<body>
+<main>
+<h1>Mix &amp; match calculator</h1>
+<p class="sub">Add the products the customer wants. Buy 2 or more and each one gets the discount.</p>
+
+<div class="card">
+  <div class="rule">
+    <label for="pct">Discount per product when buying 2+</label>
+    <input id="pct" type="number" min="0" max="100" step="0.5" value="10" inputmode="decimal"> <span>%</span>
+  </div>
+</div>
+
+<div class="card">
+  <div id="rows"></div>
+  <div class="actions">
+    <button id="add" class="main">Add product</button>
+    <button id="clear">Clear all</button>
+  </div>
+</div>
+
+<div class="total" id="total" aria-live="polite"></div>
+<div class="actions"><button id="copy">Copy quote for WhatsApp</button></div>
+<p class="note" id="msg"></p>
+</main>
+
+<script>
+(function(){
+  var rows = [{n:"",p:""},{n:"",p:""}];
+  var pct = document.getElementById('pct');
+  var box = document.getElementById('rows');
+  var totalEl = document.getElementById('total');
+  var msg = document.getElementById('msg');
+
+  try{
+    var s = JSON.parse(localStorage.getItem('cwmm')||'null');
+    if(s && s.rows && s.rows.length){rows = s.rows; if(s.pct!=null) pct.value = s.pct;}
+  }catch(e){}
+
+  function save(){ try{ localStorage.setItem('cwmm', JSON.stringify({rows:rows,pct:pct.value})); }catch(e){} }
+  function rm(n){ return 'RM ' + n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function calc(){
+    var d = Math.min(100,Math.max(0,parseFloat(pct.value)||0))/100;
+    var items = rows.filter(function(r){return parseFloat(r.p)>0;});
+    var on = items.length>=2;
+    var orig=0, net=0;
+    items.forEach(function(r){var p=parseFloat(r.p); orig+=p; net+= on? p*(1-d):p;});
+    return {d:d,on:on,count:items.length,orig:orig,net:net};
+  }
+  function draw(){
+    var c = calc();
+    box.innerHTML='';
+    rows.forEach(function(r,i){
+      var w = document.createElement('div'); w.className='row';
+      var n = document.createElement('input'); n.placeholder='Product name'; n.value=r.n; n.setAttribute('aria-label','Product name');
+      n.oninput=function(){r.n=n.value;save();};
+      var p = document.createElement('input'); p.placeholder='Price (RM)'; p.type='number'; p.min='0'; p.step='any'; p.inputMode='decimal'; p.value=r.p; p.setAttribute('aria-label','Price');
+      p.oninput=function(){r.p=p.value;save();update();};
+      var x = document.createElement('button'); x.className='x'; x.textContent='\u00d7'; x.setAttribute('aria-label','Remove product');
+      x.onclick=function(){rows.splice(i,1); if(!rows.length) rows.push({n:'',p:''}); save(); draw();};
+      var res = document.createElement('div'); res.className='res'; res.id='res'+i;
+      w.appendChild(n); w.appendChild(p); w.appendChild(x); w.appendChild(res);
+      box.appendChild(w);
+    });
+    update();
+  }
+  function update(){
+    var c = calc();
+    rows.forEach(function(r,i){
+      var el = document.getElementById('res'+i); if(!el) return;
+      var p = parseFloat(r.p);
+      if(!(p>0)){el.innerHTML='';return;}
+      el.innerHTML = c.on ? '<s>'+rm(p)+'</s><b>'+rm(p*(1-c.d))+'</b>' : rm(p)+' (add another product to unlock discount)';
+    });
+    var saved = c.orig-c.net;
+    totalEl.innerHTML =
+      '<div><span>Products</span><span>'+c.count+'</span></div>'+
+      '<div><span>Original total</span><span>'+rm(c.orig)+'</span></div>'+
+      '<div><span>Discount ('+(c.on?(c.d*100)+'%':'not yet')+')</span><span class="sv">- '+rm(saved)+'</span></div>'+
+      '<div class="big"><span>Customer pays</span><span>'+rm(c.net)+'</span></div>';
+    save();
+  }
+  document.getElementById('add').onclick=function(){rows.push({n:'',p:''});save();draw();};
+  document.getElementById('clear').onclick=function(){rows=[{n:'',p:''},{n:'',p:''}];save();draw();msg.textContent='';};
+  pct.oninput=function(){update();};
+  document.getElementById('copy').onclick=function(){
+    var c=calc(), lines=['Coway mix & match'];
+    rows.forEach(function(r){var p=parseFloat(r.p); if(p>0) lines.push('- '+(r.n||'Product')+': '+rm(p)+(c.on?' > '+rm(p*(1-c.d)):''));});
+    lines.push('Discount: '+(c.on?(c.d*100)+'% each':'none'));
+    lines.push('Total: '+rm(c.net));
+    var t=lines.join('\n');
+    var done=function(){msg.textContent='Copied. Paste it into WhatsApp.';};
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done,function(){msg.textContent='Could not copy. Select the numbers above instead.';});}
+    else{msg.textContent='Could not copy. Select the numbers above instead.';}
+  };
+  draw();
+})();
+</script>
+</body>
+</html>
